@@ -1,0 +1,18 @@
+# Dataset
+dataset/
+ 
+# Checkpoints et sorties
+output/
+outputS/
+saved_models/
+*.pth
+*.pt
+ 
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+ 
+# OS
+.DS_Store
+Thumbs.db
