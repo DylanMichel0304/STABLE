@@ -33,7 +33,8 @@ def train(args):
         G_mid_channels=args.G_mid_channels, G_norm_type=args.G_norm_type,
         G_demodulated=args.G_demodulated, enc_act=args.enc_act, dec_act=args.dec_act,
         momentum=args.momentum, D_n_scales=args.D_n_scales, D_n_layers=args.D_n_layers,
-        D_ds_stride=args.D_ds_stride, D_norm_type=args.D_norm_type, device=args.device
+        D_ds_stride=args.D_ds_stride, D_norm_type=args.D_norm_type, device=args.device,
+        multi_gpu=args.multi_gpu
     )
 
     trainer = StableTrainer(
@@ -104,6 +105,7 @@ def main():
 
     # General
     parser.add_argument("--device", type=str, default="cuda", help="Device to use (cuda or cpu)")
+    parser.add_argument("--multi_gpu", action="store_true", help="Use DataParallel across all available GPUs")
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
 
     args = parser.parse_args()

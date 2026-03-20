@@ -4,7 +4,7 @@ import itertools
 from stable.models import UNet, MultiDiscriminator
 
 class StableModel(torch.nn.Module):
-    def __init__(self, n_in, n_out, n_info, G_mid_channels=[64,128,256,512,1024], G_norm_type='batch', G_demodulated=True, enc_act='relu', dec_act='relu', momentum=0.1, D_n_scales=1, D_n_layers=3, D_ds_stride=2, D_norm_type='batch', device='cuda'):
+    def __init__(self, n_in, n_out, n_info, G_mid_channels=[64,128,256,512,1024], G_norm_type='batch', G_demodulated=True, enc_act='relu', dec_act='relu', momentum=0.1, D_n_scales=1, D_n_layers=3, D_ds_stride=2, D_norm_type='batch', device='cuda', multi_gpu=False):
         
         super().__init__()
         
@@ -22,6 +22,7 @@ class StableModel(torch.nn.Module):
         self.D_ds_stride = D_ds_stride
         self.D_norm_type = D_norm_type
         self.device = device
+        self.multi_gpu = multi_gpu
         
         self.Enc1 = UNet(n_in=n_in, n_out=n_info, mid_channels=G_mid_channels, norm_type=G_norm_type, 
                          demodulated=G_demodulated, act=enc_act, momentum=momentum).to(device)
@@ -38,6 +39,15 @@ class StableModel(torch.nn.Module):
         self.D2 = MultiDiscriminator(channels=n_out, num_scales=D_n_scales, num_layers=D_n_layers, 
                                      downsample_stride=D_ds_stride, norm_type=D_norm_type, 
                                      kernel_size=4, stride=2, padding=1).to(device)
+        
+        if multi_gpu and torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs with DataParallel")
+            self.Enc1 = torch.nn.DataParallel(self.Enc1)
+            self.Dec1 = torch.nn.DataParallel(self.Dec1)
+            self.Enc2 = torch.nn.DataParallel(self.Enc2)
+            self.Dec2 = torch.nn.DataParallel(self.Dec2)
+            self.D1 = torch.nn.DataParallel(self.D1)
+            self.D2 = torch.nn.DataParallel(self.D2)
         
     def get_settings(self):
         return {'n_in': self.n_in, 
@@ -79,22 +89,25 @@ class StableModel(torch.nn.Module):
         self.D1.to(device)
         self.D2.to(device)
         
+    def _get_module(self, net):
+        return net.module if isinstance(net, torch.nn.DataParallel) else net
+
     def load_state_dict(self, path):
         state_dict = torch.load(path)
-        self.Enc1.load_state_dict(state_dict['Enc1'])
-        self.Dec1.load_state_dict(state_dict['Dec1'])
-        self.Enc2.load_state_dict(state_dict['Enc2'])
-        self.Dec2.load_state_dict(state_dict['Dec2'])
-        self.D1.load_state_dict(state_dict['D1'])
-        self.D2.load_state_dict(state_dict['D2'])
+        self._get_module(self.Enc1).load_state_dict(state_dict['Enc1'])
+        self._get_module(self.Dec1).load_state_dict(state_dict['Dec1'])
+        self._get_module(self.Enc2).load_state_dict(state_dict['Enc2'])
+        self._get_module(self.Dec2).load_state_dict(state_dict['Dec2'])
+        self._get_module(self.D1).load_state_dict(state_dict['D1'])
+        self._get_module(self.D2).load_state_dict(state_dict['D2'])
         
     def save_state_dict(self, path):
-        state_dict = {'Enc1': self.Enc1.state_dict(),
-                      'Dec1': self.Dec1.state_dict(),
-                      'Enc2': self.Enc2.state_dict(),
-                      'Dec2': self.Dec2.state_dict(),
-                      'D1': self.D1.state_dict(),
-                      'D2': self.D2.state_dict()}
+        state_dict = {'Enc1': self._get_module(self.Enc1).state_dict(),
+                      'Dec1': self._get_module(self.Dec1).state_dict(),
+                      'Enc2': self._get_module(self.Enc2).state_dict(),
+                      'Dec2': self._get_module(self.Dec2).state_dict(),
+                      'D1': self._get_module(self.D1).state_dict(),
+                      'D2': self._get_module(self.D2).state_dict()}
         torch.save(state_dict, path)
         
     def get_G_parameters(self):
